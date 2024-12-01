@@ -8,7 +8,7 @@ on:
       - ci/pipeline
     # Trigger the pipeline when we perform changes on specific files in the code
     paths:
-      - **  # any change made to this project
+      - * # any change made to this project
       - 'Dockerfile'   # any change made to the backend Dockerfile
       - 'docker-compose.yml'   # any change in the docker-compose file
       - .github/workflows/*-backend.yml    # any change made to this file
