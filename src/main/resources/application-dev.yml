@@ -1,0 +1,45 @@
+application:
+  security:
+    jwt:
+      secret-key: BJZS1i93IqUfoq9ZwRODyjM86PwNTsPj4UbuAjZtzgE0YPn+CnH2sYS1ENVjw9H
+      expiration: 8640000
+  mailing:
+    activation-url: http://localhost:4200/activate-account
+  cors:
+    origins: http://localhost:4200,http://localhost:8081
+  file:
+    upload:
+      photo-output-path: ./uploads
+
+server:
+  port: 8088
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://mysql-bsn:3306/book_social_network
+    username: mysql123  # for docker user mysql123
+    password: mysql123       # for docker use mysql123
+  jpa:
+    database: mysql
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+  mail:
+    host: ${EMAIL_HOSTNAME}
+    port: 465
+    username: ${EMAIL_USERNAME}
+    password: ${EMAIL_PASSWORD}
+    protocol: smtp
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
+            trust: "*"
+        starttls:
+          enable: true

@@ -1,0 +1,49 @@
+services:
+  mysql-bsn:
+    container_name: mysql-bsn
+    image: mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: mysql123
+      MYSQL_DATABASE: book_social_network
+      MYSQL_USER: mysql123
+      MYSQL_PASSWORD:
+    ports:
+      - 3306:3306
+    networks:
+      - spring-demo
+    volumes:
+      - mysql_data_volume:/var/lib/mysql
+  phpmyadmin:
+    container_name: phpmyadmin-bsn
+    image: phpmyadmin
+    restart: unless-stopped
+    ports:
+      - 8080:80
+    links:
+      - mysql-bsn
+    networks:
+      - spring-demo
+  mail-dev-bsn:
+    container_name: mail-dev-bsn
+    image: maildev/maildev
+    ports:
+      - 1080:1080
+      - 1025:1025
+  bsn-api:
+    container_name: bsn-api
+    image: alishakunder/bsn-api:1.0.0
+    ports:
+      - 8088:8088
+    networks:
+      - spring-demo
+    depends_on:
+      - mysql-bsn
+
+volumes:
+  mysql_data_volume:
+    driver: local
+
+networks:
+  spring-demo:
+    driver: bridge
