@@ -1,0 +1,157 @@
+# Give a name to the pipeline
+name: BSN backend API pipeline
+# Mention when u want to trigger the pipeline. Here we say on action push.
+on:
+  push:
+  # You can mention on which specific branch push you want to trigger the pipeline. If you remove branches, the pipeline will be triggered on any push to the code
+    branches:
+      - ci/pipeline
+    # Trigger the pipeline when we perform changes on specific files in the code
+    paths:
+      - book-network/**  # any change made to the backend api project
+      - docker/backend/**   # any change made to the backend Dockerfile
+      - 'docker-compose.yml'   # any change in the docker-compose file
+      - .github/workflows/*-backend.yml    # any change made to this file
+
+jobs:
+  compile:   # Job to compile the project
+    runs-on: ubuntu-latest    # define the type of machine to run the job on. Default runner when we want to use the Github action runner = ubuntu-latest - a linux OS. If you have your own server, then use self-hosted
+    name: Compile project   # name of the job
+    steps:                   # define the job steps
+      - name: Checkout code
+        uses: actions/checkout@v4     # we use here pre-defined github action https://github.com/actions/checkout
+        with:                         # specify the arguments
+          fetch-depth: 1    # dont want to checkout sub-branches, just the current one
+          
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: 'corretto'
+          
+      - name: Compile project
+        run: | # use run when u want to specify a custom action. Use (|) when u want to specify multiple commands
+          cd book-network
+          mvn clean compile
+  build:
+    runs-on: ubuntu-latest
+    name: Build backend
+#    needs: [compile, unit-tests]  # compile and unit-tests jobs can run parallely but the build step needs to wait for them to complete
+    needs: [compile]  # compile and unit-tests jobs can run parallely but the build step needs to wait for them to complete
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: 'corretto'
+      - name: Build backend project
+        run: |
+          cd book-network
+          export EMAIL_HOSTNAME=${{ secrets.EMAIL_HOSTNAME }}
+          export EMAIL_USERNAME=${{ secrets.EMAIL_USERNAME }}
+          export EMAIL_PASSWORD=${{ secrets.EMAIL_PASSWORD }}
+          export DOCKERHUB_USERNAME=${{ vars.DOCKERHUB_USERNAME }}
+          export BACKEND_VERSION=${{ steps.extract_version.outputs.VERSION}}
+          mvn clean package -DskipTests
+          
+  build-push-docker-image:
+    name: Build & push docker image
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - name: Checkout the code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: 'corretto'
+          
+      - name: Build backend project
+        run: |
+          cd book-network
+          mvn clean package -DskipTests
+          
+      - name: Extract project version
+        id: extract_version                     # give your step and id
+        run: |
+          cd book-network
+          echo "VERSION=$(mvn -q -Dexec.executable='echo' -Dexec.args='${project.version}' --non-recursive exec:exec)" >> $GITHUB_OUTPUT
+
+      - name: Login to Dockerhub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}    # use secrets to access github secrets defined in the repository
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+          
+      - name: Build and push to Dockerhub
+        uses: docker/build-push-action@v6
+        with:
+          context: book-network   # folder from where to run the docker command. If you dont use mono repo approach and if you dockerfile is within the project then use dot (.)
+          file: docker/backend/Dockerfile
+          push: true               # if push = true, then it will push the image to docker hub
+          platforms: linux/amd64    # if amd64 is not compatible with your server, you will see an error. YOu would then need to change the platform
+          tags: ${{ vars.DOCKERHUB_USERNAME }}/bsn-api:${{ steps.extract_version.outputs.VERSION}}, ${{ vars.DOCKERHUB_USERNAME }}/bsn-api:latest  # define here 2 tags alishakunder/bsn-api:1.0.4 & alishakunder/bsn-api:latest
+          build-args: |
+            PROFILE=dev
+            APP_VERSION=${{ steps.extract_version.outputs.VERSION}}
+            
+  deploy:
+    name: Deploy backend
+    runs-on: ubuntu-latest
+    needs: [build-push-docker-image]
+    steps:
+    
+      - name: Checkout code
+        uses: actions/checkout@v4     # we use here pre-defined github action https://github.com/actions/checkout
+        with:                         # specify the arguments
+          fetch-depth: 1    # dont want to checkout sub-branches, just the current one
+          
+      - name: Create deployment folder
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_IP }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_KEY }}
+          port: 22
+          script: |
+            mkdir -p ci-cd
+            
+      - name: Copy the docker compose file
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_IP }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_KEY }}
+          port: 22
+          source: "docker-compose.yml"
+          target: "/home/***/ci-cd"
+          overwrite: true
+          
+      - name: Login to Dockerhub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+          
+      - name: Set env variables required by the application backend in this linux env and deploy
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_IP }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_KEY }}
+          port: 22
+          script: |
+            cd ci-cd
+            export EMAIL_HOSTNAME=${{ secrets.EMAIL_HOSTNAME }}
+            export EMAIL_USERNAME=${{ secrets.EMAIL_USERNAME }}
+            export EMAIL_PASSWORD=${{ secrets.EMAIL_PASSWORD }}
+            docker compose -f docker-compose.yml pull -q
+            docker compose -f docker-compose.yml up -d
