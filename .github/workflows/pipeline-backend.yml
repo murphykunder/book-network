@@ -86,13 +86,16 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .   # folder from where to run the docker command. If you dont use mono repo approach and if you dockerfile is within the project then use dot (.)
-          file: docker/backend/Dockerfile
+          file: Dockerfile
           push: true               # if push = true, then it will push the image to docker hub
           platforms: linux/amd64    # if amd64 is not compatible with your server, you will see an error. YOu would then need to change the platform
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/bsn-api:${{ steps.extract_version.outputs.VERSION}}, ${{ secrets.DOCKERHUB_USERNAME }}/bsn-api:latest  # define here 2 tags alishakunder/bsn-api:1.0.4 & alishakunder/bsn-api:latest
           build-args: |
             PROFILE=dev
             APP_VERSION=${{ steps.extract_version.outputs.VERSION}}
+            EMAIL_HOSTNAME=${{ secrets.EMAIL_HOSTNAME }}
+            EMAIL_USERNAME=${{ secrets.EMAIL_USERNAME }}
+            EMAIL_PASSWORD=${{ secrets.EMAIL_PASSWORD }}
             
   deploy:
     name: Deploy backend
