@@ -8,8 +8,8 @@ on:
       - ci/pipeline
     # Trigger the pipeline when we perform changes on specific files in the code
     paths:
-      - book-network/**  # any change made to the backend api project
-      - docker/backend/**   # any change made to the backend Dockerfile
+      - **  # any change made to this project
+      - 'Dockerfile'   # any change made to the backend Dockerfile
       - 'docker-compose.yml'   # any change in the docker-compose file
       - .github/workflows/*-backend.yml    # any change made to this file
 
@@ -31,7 +31,6 @@ jobs:
           
       - name: Compile project
         run: | # use run when u want to specify a custom action. Use (|) when u want to specify multiple commands
-          cd book-network
           mvn clean compile
   build:
     runs-on: ubuntu-latest
@@ -50,12 +49,6 @@ jobs:
           distribution: 'corretto'
       - name: Build backend project
         run: |
-          cd book-network
-          export EMAIL_HOSTNAME=${{ secrets.EMAIL_HOSTNAME }}
-          export EMAIL_USERNAME=${{ secrets.EMAIL_USERNAME }}
-          export EMAIL_PASSWORD=${{ secrets.EMAIL_PASSWORD }}
-          export DOCKERHUB_USERNAME=${{ vars.DOCKERHUB_USERNAME }}
-          export BACKEND_VERSION=${{ steps.extract_version.outputs.VERSION}}
           mvn clean package -DskipTests
           
   build-push-docker-image:
@@ -76,29 +69,27 @@ jobs:
           
       - name: Build backend project
         run: |
-          cd book-network
           mvn clean package -DskipTests
           
       - name: Extract project version
         id: extract_version                     # give your step and id
         run: |
-          cd book-network
           echo "VERSION=$(mvn -q -Dexec.executable='echo' -Dexec.args='${project.version}' --non-recursive exec:exec)" >> $GITHUB_OUTPUT
 
       - name: Login to Dockerhub
         uses: docker/login-action@v3
         with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}    # use secrets to access github secrets defined in the repository
+          username: ${{ secrets.DOCKERHUB_USERNAME }}    # use secrets to access github secrets defined in the repository
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
           
       - name: Build and push to Dockerhub
         uses: docker/build-push-action@v6
         with:
-          context: book-network   # folder from where to run the docker command. If you dont use mono repo approach and if you dockerfile is within the project then use dot (.)
+          context: .   # folder from where to run the docker command. If you dont use mono repo approach and if you dockerfile is within the project then use dot (.)
           file: docker/backend/Dockerfile
           push: true               # if push = true, then it will push the image to docker hub
           platforms: linux/amd64    # if amd64 is not compatible with your server, you will see an error. YOu would then need to change the platform
-          tags: ${{ vars.DOCKERHUB_USERNAME }}/bsn-api:${{ steps.extract_version.outputs.VERSION}}, ${{ vars.DOCKERHUB_USERNAME }}/bsn-api:latest  # define here 2 tags alishakunder/bsn-api:1.0.4 & alishakunder/bsn-api:latest
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/bsn-api:${{ steps.extract_version.outputs.VERSION}}, ${{ secrets.DOCKERHUB_USERNAME }}/bsn-api:latest  # define here 2 tags alishakunder/bsn-api:1.0.4 & alishakunder/bsn-api:latest
           build-args: |
             PROFILE=dev
             APP_VERSION=${{ steps.extract_version.outputs.VERSION}}
